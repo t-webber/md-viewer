@@ -5,25 +5,23 @@ use actix_web::{
     web::{self, Data},
 };
 use counter::counter_config;
+use credentials::{GoogleAuthCredentials, get_credentials};
 
 mod counter;
+mod credentials;
 
 #[actix_web::get("/")]
 async fn hello(data: Data<AppState>) -> impl Responder {
     HttpResponse::Ok().body(format!("Hello world in {}!", data.app_name))
 }
 
-#[actix_web::post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    HttpResponse::Ok().body(req_body)
-}
-
-async fn manual_hello() -> impl Responder {
-    HttpResponse::Ok().body("Hey there!")
-}
-
-async fn index() -> impl Responder {
-    "Hello world!"
+#[actix_web::get("/credentials")]
+async fn display_credentials(data: Data<AppState>) -> impl Responder {
+    HttpResponse::Ok().body(if let Some(credentials) = &data.credentials {
+        format!("{credentials}")
+    } else {
+        "No credentials found".to_owned()
+    })
 }
 
 const APP_NAME: &str = "mdViewer";
@@ -31,6 +29,7 @@ const APP_NAME: &str = "mdViewer";
 struct AppState {
     app_name: &'static str,
     counter: Mutex<i32>,
+    credentials: Option<GoogleAuthCredentials>,
 }
 
 impl AppState {
@@ -38,16 +37,18 @@ impl AppState {
         Self {
             app_name: APP_NAME,
             counter: Mutex::new(0),
+            credentials: get_credentials().map(Some).unwrap_or_else(|err| {
+                eprintln!("{err}");
+                None
+            }),
         }
     }
 }
 
 fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hello)
-        .service(echo)
-        .service(web::scope("/counter").configure(counter_config))
-        .route("/hey", web::get().to(manual_hello))
-        .service(web::scope("/app").route("/index.html", web::get().to(index)));
+        .service(display_credentials)
+        .service(web::scope("/counter").configure(counter_config));
 }
 
 #[actix_web::main]
