@@ -1,27 +1,20 @@
 use std::{env::set_var, sync::Mutex};
 
-use actix_web::{
-    App, HttpResponse, HttpServer, Responder,
-    web::{self, Data},
+use actix_web::{App, HttpResponse, HttpServer, Responder, web};
+use auth::{
+    auth_config,
+    credentials::{GoogleAuthCredentials, get_credentials},
 };
-use counter::counter_config;
-use credentials::{GoogleAuthCredentials, get_credentials};
 
+mod auth;
 mod counter;
-mod credentials;
+mod url;
+
+const LOCAL_ENV_PATH: &str = ".env";
 
 #[actix_web::get("/")]
-async fn hello(data: Data<AppState>) -> impl Responder {
+async fn hello(data: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().body(format!("Hello world in {}!", data.app_name))
-}
-
-#[actix_web::get("/credentials")]
-async fn display_credentials(data: Data<AppState>) -> impl Responder {
-    HttpResponse::Ok().body(if let Some(credentials) = &data.credentials {
-        format!("{credentials}")
-    } else {
-        "No credentials found".to_owned()
-    })
 }
 
 const APP_NAME: &str = "mdViewer";
@@ -29,7 +22,7 @@ const APP_NAME: &str = "mdViewer";
 struct AppState {
     app_name: &'static str,
     counter: Mutex<i32>,
-    credentials: Option<GoogleAuthCredentials>,
+    credentials: GoogleAuthCredentials,
 }
 
 impl AppState {
@@ -37,18 +30,15 @@ impl AppState {
         Self {
             app_name: APP_NAME,
             counter: Mutex::new(0),
-            credentials: get_credentials().map(Some).unwrap_or_else(|err| {
-                eprintln!("{err}");
-                None
-            }),
+            credentials: dbg!(get_credentials().unwrap()),
         }
     }
 }
 
 fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hello)
-        .service(display_credentials)
-        .service(web::scope("/counter").configure(counter_config));
+        .service(web::scope("/auth").configure(auth_config))
+        .service(web::scope("/counter").configure(counter::counter_config));
 }
 
 #[actix_web::main]
@@ -58,10 +48,10 @@ async fn main() -> std::io::Result<()> {
     }
     env_logger::init();
 
-    let data = Data::new(AppState::new());
+    let data = web::Data::new(AppState::new());
 
     HttpServer::new(move || App::new().configure(config).app_data(data.clone()))
-        .bind(("127.0.0.1", 8080))?
+        .bind(dbg!(url::get_url()))?
         .run()
         .await
 }

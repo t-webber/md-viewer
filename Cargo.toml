@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 actix-web = "4"
+dotenv = "0.15.0"
 env_logger = "0"
