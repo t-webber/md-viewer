@@ -1,10 +1,7 @@
 use std::{env::set_var, sync::Mutex};
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
-use auth::{
-    auth_config,
-    credentials::{GoogleAuthCredentials, get_credentials},
-};
+use auth::credentials::{GoogleAuthCredentials, get_credentials};
 
 mod auth;
 mod counter;
@@ -17,12 +14,19 @@ async fn hello(data: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().body(format!("Hello world in {}!", data.app_name))
 }
 
+#[actix_web::get("/debug")]
+async fn debug(data: web::Data<AppState>) -> impl Responder {
+    HttpResponse::Ok().body(format!("{:?}", data))
+}
+
 const APP_NAME: &str = "mdViewer";
 
+#[derive(Debug)]
 struct AppState {
     app_name: &'static str,
     counter: Mutex<i32>,
     credentials: GoogleAuthCredentials,
+    google_token: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -31,13 +35,15 @@ impl AppState {
             app_name: APP_NAME,
             counter: Mutex::new(0),
             credentials: dbg!(get_credentials().unwrap()),
+            google_token: Mutex::new(None),
         }
     }
 }
 
 fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hello)
-        .service(web::scope("/auth").configure(auth_config))
+        .service(debug)
+        .service(web::scope("/auth").configure(auth::auth_config))
         .service(web::scope("/counter").configure(counter::counter_config));
 }
 

@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, web};
+use actix_web::web;
 
 use crate::AppState;
 
@@ -13,14 +13,22 @@ async fn login(data: web::Data<AppState>) -> String {
     )
 }
 
-#[actix_web::get("/callback/{auth_code}")]
-async fn callback(req: HttpRequest) -> String {
-    req.match_info().get("auth_code").map_or_else(
-        || String::from("Invalid Auth Code."),
-        |code| code.to_owned(),
-    )
+#[derive(serde::Deserialize)]
+struct CallBack {
+    code: String,
+}
+
+#[actix_web::get("/callback/google")]
+async fn google_callback(query: web::Query<CallBack>, data: web::Data<AppState>) -> String {
+    match data.google_token.lock() {
+        Ok(mut token) => {
+            *token = Some(query.code.clone());
+            format!("Token set to {}", query.code)
+        }
+        Err(_) => format!("Failed to set token to {}", query.code),
+    }
 }
 
 pub fn auth_config(cfg: &mut web::ServiceConfig) {
-    cfg.service(login).service(callback);
+    cfg.service(login).service(google_callback);
 }
