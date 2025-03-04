@@ -25,14 +25,14 @@ struct CallBack {
 pub struct ClientOAuthData {
     access_token: String,
     expires_in: u32,
+    id_token: String,
     scope: String,
     token_type: String,
-    id_token: String,
 }
 
 impl ClientOAuthData {
     pub fn to_token(&self) -> String {
-        self.access_token.to_owned()
+        self.access_token.clone()
     }
 }
 
@@ -49,9 +49,9 @@ pub async fn google_callback(
     .await
     {
         Ok(text) => match data.client_oauth_data.lock() {
-            Ok(mut client_oauth_data) => match serde_json::from_str(&text) {
-                Ok(data) => {
-                    *client_oauth_data = Some(data);
+            Ok(mut app_client_data) => match serde_json::from_str(&text) {
+                Ok(new_client_data) => {
+                    *app_client_data = Some(new_client_data);
                     return HttpResponse::Found()
                         .append_header(("Location", "/auth/info"))
                         .finish();
@@ -63,7 +63,7 @@ pub async fn google_callback(
         Err(err) => err,
     };
     if let Ok(mut cache) = data.cache.lock() {
-        *cache = Some(content)
+        *cache = Some(content);
     }
     HttpResponse::Found()
         .append_header(("Location", "/auth/callback/error"))
@@ -72,16 +72,16 @@ pub async fn google_callback(
 
 #[actix_web::get("/callback/error")]
 pub async fn callback_error(data: web::Data<AppState>) -> String {
-    match data.cache.lock() {
-        Ok(mut cache) => {
+    data.cache.lock().map_or_else(
+        |_| String::from("Failed to access error"),
+        |mut cache| {
             let res = cache
                 .to_owned()
                 .unwrap_or_else(|| String::from("Unknown error"));
             *cache = None;
             res
-        }
-        Err(_) => String::from("Failed to access error"),
-    }
+        },
+    )
 }
 
 #[actix_web::get("/info")]
