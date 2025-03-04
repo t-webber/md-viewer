@@ -42,11 +42,13 @@
 #![expect(clippy::missing_docs_in_private_items, reason = "lazy")]
 #![expect(clippy::exhaustive_structs, reason = "needed by actix")]
 
+mod api;
 mod auth;
 mod counter;
+mod drive;
 mod url;
 
-use actix_web::{App, HttpResponse, HttpServer, Responder, web};
+use actix_web::{App, HttpResponse, HttpServer, web};
 use auth::{
     credentials::{GoogleAuthCredentials, get_credentials},
     login::ClientOAuthData,
@@ -91,12 +93,12 @@ impl AppState {
 }
 
 #[actix_web::get("/")]
-async fn hello(data: web::Data<AppState>) -> impl Responder {
+async fn hello(data: web::Data<AppState>) -> HttpResponse {
     HttpResponse::Ok().body(format!("Hello world in {}!", data.app_name))
 }
 
 #[actix_web::get("/debug")]
-async fn debug(data: web::Data<AppState>) -> impl Responder {
+async fn debug(data: web::Data<AppState>) -> HttpResponse {
     HttpResponse::Ok().body(format!("{data:?}"))
 }
 
@@ -104,7 +106,13 @@ fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(hello)
         .service(debug)
         .service(web::scope("/auth").configure(auth::auth_config))
-        .service(web::scope("/counter").configure(counter::counter_config));
+        .service(web::scope("/counter").configure(counter::counter_config))
+        .service(web::scope("/drive").configure(drive::drive_config))
+        .default_service(web::to(not_found));
+}
+
+async fn not_found() -> HttpResponse {
+    HttpResponse::NotFound().body("Oops! Page not found.")
 }
 
 #[actix_web::main]

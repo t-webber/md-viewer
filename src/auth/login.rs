@@ -2,7 +2,7 @@ use actix_web::{HttpResponse, Responder, http, web};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, auth::send_and_text};
+use crate::{AppState, api::send_and_text};
 
 const SCOPE: &str = "email%20profile%20https://www.googleapis.com/auth/drive.readonly";
 
