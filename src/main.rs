@@ -60,11 +60,21 @@ use std::io;
 use std::sync::Mutex;
 
 #[macro_export]
+macro_rules! ok_or_internal {
+    ($value:expr) => {
+        match $value {
+            Ok(val) => actix_web::HttpResponse::Ok().body(val),
+            Err(err) => actix_web::HttpResponse::InternalServerError().body(err),
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! token {
     ($data:ident) => {
         &match $data.to_token() {
             Ok(token) => token,
-            Err(err) => return err,
+            Err(err) => return actix_web::HttpResponse::InternalServerError().body(err),
         }
     };
 }

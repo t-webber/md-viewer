@@ -1,9 +1,9 @@
-use actix_web::web;
+use actix_web::{HttpResponse, web};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{AppState, api::send_and_text, token};
+use crate::{AppState, api::send_and_text, ok_or_internal, token};
 
 const APP_FOLDER: &str = "___@@@md-viewer@@@___";
 
@@ -93,25 +93,27 @@ async fn insure_folder_exists(token: &str, folder_name: &str) -> Result<DriveFil
 }
 
 #[actix_web::get("/root")]
-async fn ls_drive(data: web::Data<AppState>) -> String {
-    load_files(&[("q", "'root' in parents")], token!(data))
-        .await
-        .and_then(|files| {
-            serde_json::to_string_pretty(&files)
-                .map_err(|err| format!("Failed to serialise:\n{err}"))
-        })
-        .unwrap_or_else(|err| err)
+async fn ls_drive(data: web::Data<AppState>) -> HttpResponse {
+    ok_or_internal!(
+        load_files(&[("q", "'root' in parents")], token!(data))
+            .await
+            .and_then(|files| {
+                serde_json::to_string_pretty(&files)
+                    .map_err(|err| format!("Failed to serialise:\n{err}"))
+            })
+    )
 }
 
 #[actix_web::get("/type/{file_type}")]
-async fn ls_type(data: web::Data<AppState>, path: web::Path<(String,)>) -> String {
-    load_files(&[("q", "'root' in parents")], token!(data))
-        .await
-        .and_then(|files| {
-            serde_json::to_string_pretty(&files.filter_with_type(&path.into_inner().0))
-                .map_err(|err| format!("Failed to serialise:\n{err}"))
-        })
-        .unwrap_or_else(|err| err)
+async fn ls_type(data: web::Data<AppState>, path: web::Path<(String,)>) -> HttpResponse {
+    ok_or_internal!(
+        load_files(&[("q", "'root' in parents")], token!(data))
+            .await
+            .and_then(|files| {
+                serde_json::to_string_pretty(&files.filter_with_type(&path.into_inner().0))
+                    .map_err(|err| format!("Failed to serialise:\n{err}"))
+            })
+    )
 }
 
 async fn load_files(query: &[(&str, &str)], token: &str) -> Result<DriveFileList, String> {
@@ -128,24 +130,24 @@ async fn load_files(query: &[(&str, &str)], token: &str) -> Result<DriveFileList
 }
 
 #[actix_web::get("/folder/{id}")]
-async fn ls_folder(data: web::Data<AppState>, path: web::Path<(String,)>) -> String {
-    load_files(
-        &[("q", &format!("'{}' in parents", path.into_inner().0))],
-        token!(data),
+async fn ls_folder(data: web::Data<AppState>, path: web::Path<(String,)>) -> HttpResponse {
+    ok_or_internal!(
+        load_files(
+            &[("q", &format!("'{}' in parents", path.into_inner().0))],
+            token!(data),
+        )
+        .await
+        .and_then(|files| {
+            serde_json::to_string_pretty(&files)
+                .map_err(|err| format!("Failed to serialise:\n{err}"))
+        })
     )
-    .await
-    .and_then(|files| {
-        serde_json::to_string_pretty(&files).map_err(|err| format!("Failed to serialise:\n{err}"))
-    })
-    .unwrap_or_else(|err| err)
 }
 
 #[actix_web::get("/has_blob")]
-async fn route_has_blob(data: web::Data<AppState>) -> String {
-    let token = token!(data);
-
-    match insure_folder_exists(token, APP_FOLDER).await {
-        Err(err) => err,
-        Ok(has) => format!("Your drive has {APP_FOLDER}\nData:\n{has:?}"),
+async fn route_has_blob(data: web::Data<AppState>) -> HttpResponse {
+    match insure_folder_exists(token!(data), APP_FOLDER).await {
+        Err(err) => HttpResponse::InternalServerError().body(err),
+        Ok(has) => HttpResponse::Ok().body(format!("Your drive has {APP_FOLDER}\nData:\n{has:?}")),
     }
 }
