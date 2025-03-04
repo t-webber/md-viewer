@@ -58,6 +58,16 @@ use std::env::set_var;
 use std::io;
 use std::sync::Mutex;
 
+#[macro_export]
+macro_rules! token {
+    ($data:ident) => {
+        &match $data.to_token() {
+            Ok(token) => token,
+            Err(err) => return err,
+        }
+    };
+}
+
 const APP_NAME: &str = "mdViewer";
 const LOCAL_ENV_PATH: &str = ".env";
 
@@ -86,7 +96,7 @@ impl AppState {
             Err(err) => Err(format!("Failed to get global state:\n{err}")),
             Ok(data_guard) => data_guard.as_ref().map_or_else(
                 || Err("User not logged in. Please go to /auth/login".to_owned()),
-                |data| Ok(data.to_token()),
+                |data| Ok(data.as_token().to_owned()),
             ),
         }
     }

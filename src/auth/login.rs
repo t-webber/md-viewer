@@ -1,19 +1,24 @@
-use actix_web::{HttpResponse, Responder, http, web};
+use actix_web::{
+    HttpResponse, http,
+    web::{self, Redirect},
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, api::send_and_text};
 
-const SCOPE: &str = "email%20profile%20https://www.googleapis.com/auth/drive.readonly";
+const SCOPE: &str = "email%20profile%20https://www.googleapis.com/auth/drive%20openid";
 
 #[actix_web::get("/login")]
-pub async fn google_login(data: web::Data<AppState>) -> impl Responder {
+pub async fn google_login(data: web::Data<AppState>) -> Redirect {
     web::Redirect::to(format!(
-        "https://accounts.google.com/o/oauth2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}&access_type=offline",
+        "https://accounts.google.com/o/oauth2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}&access_type=offline&prompt=consent",
         client_id = data.credentials.as_id(),
         redirect_uri = data.credentials.as_redirect_uri(),
-      scope = SCOPE
-    )).permanent().using_status_code(http::StatusCode::FOUND)
+        scope = SCOPE
+    ))
+    .permanent()
+    .using_status_code(http::StatusCode::FOUND)
 }
 
 #[derive(Deserialize)]
@@ -31,8 +36,8 @@ pub struct ClientOAuthData {
 }
 
 impl ClientOAuthData {
-    pub fn to_token(&self) -> String {
-        self.access_token.clone()
+    pub fn as_token(&self) -> &str {
+        &self.access_token
     }
 }
 
