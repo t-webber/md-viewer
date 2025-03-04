@@ -12,7 +12,7 @@ const SCOPE: &str = "email%20profile%20https://www.googleapis.com/auth/drive%20o
 #[actix_web::get("/login")]
 pub async fn google_login(data: web::Data<AppState>) -> Redirect {
     web::Redirect::to(format!(
-        "https://accounts.google.com/o/oauth2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}&access_type=offline&prompt=consent",
+        "https://accounts.google.com/o/oauth2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}&access_type=offline",
         client_id = data.credentials.as_id(),
         redirect_uri = data.credentials.as_redirect_uri(),
         scope = SCOPE

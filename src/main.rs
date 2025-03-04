@@ -41,6 +41,7 @@
 )]
 #![expect(clippy::missing_docs_in_private_items, reason = "lazy")]
 #![expect(clippy::exhaustive_structs, reason = "needed by actix")]
+#![expect(clippy::print_stderr, reason = "logging is good")]
 
 mod api;
 mod auth;

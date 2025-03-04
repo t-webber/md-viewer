@@ -7,7 +7,7 @@ use crate::{AppState, api::send_and_text, token};
 
 const APP_FOLDER: &str = "___@@@md-viewer@@@___";
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 #[expect(non_snake_case, reason = "needed by serde")]
 struct DriveFile {
     id: String,
@@ -33,18 +33,63 @@ impl DriveFileList {
     }
 }
 
+async fn create_folder(token: &str, folder_name: &str) -> Result<DriveFile, String> {
+    eprintln!("Folder {folder_name} not found. Creating...");
+    let url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+
+    let metadata = json!({
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder"
+    })
+    .to_string();
+
+    let boundary = "boundary";
+    let multipart = format!(
+        "--{boundary}\r\n\
+         Content-Type: application/json; charset=UTF-8\r\n\r\n\
+         {metadata}\r\n\
+         --{boundary}--\r\n",
+    );
+
+    let content_type = format!("multipart/related; boundary={boundary}");
+
+    match Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .header("Content-Type", content_type)
+        .body(multipart)
+        .send()
+        .await
+    {
+        Ok(res) => match res.text().await {
+            Ok(text) => serde_json::from_str(&text)
+                .map_err(|err| format!("Failed to serialise response: {err}")),
+            Err(err) => Err(format!("Failed to get text: {err}")),
+        },
+        Err(err) => Err(format!("Failed to post: {err}")),
+    }
+}
+
 pub fn drive_config(cfg: &mut web::ServiceConfig) {
     cfg.service(ls_drive)
         .service(ls_type)
         .service(ls_folder)
-        .service(make_blob)
+        .service(route_has_blob)
         .service(route_has_blob);
 }
 
-async fn has_folder(token: &str, name: &str) -> Result<bool, String> {
+async fn has_folder(token: &str, name: &str) -> Result<Option<DriveFile>, String> {
     load_files(&[("q", "'root' in parents")], token)
         .await
-        .map(|files| files.files.iter().any(|file| file.name == name))
+        .map(|files| files.files.into_iter().find(|file| file.name == name))
+}
+
+async fn insure_folder_exists(token: &str, folder_name: &str) -> Result<DriveFile, String> {
+    match has_folder(token, folder_name).await {
+        Err(err) => Err(err),
+        Ok(Some(created_folder)) => Ok(created_folder),
+        Ok(None) => create_folder(token, folder_name).await,
+    }
 }
 
 #[actix_web::get("/root")]
@@ -97,46 +142,10 @@ async fn ls_folder(data: web::Data<AppState>, path: web::Path<(String,)>) -> Str
 
 #[actix_web::get("/has_blob")]
 async fn route_has_blob(data: web::Data<AppState>) -> String {
-    has_folder(token!(data), APP_FOLDER).await.map_or_else(
-        |err| err,
-        |has| format!("Your drive has {APP_FOLDER}?: {has}"),
-    )
-}
+    let token = token!(data);
 
-#[actix_web::get("/make_blob")]
-async fn make_blob(data: web::Data<AppState>) -> String {
-    let url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-
-    let metadata = json!({
-        "name": APP_FOLDER,
-        "mimeType": "application/vnd.google-apps.folder"
-    })
-    .to_string();
-
-    let boundary = "boundary";
-    let multipart = format!(
-        "--{boundary}\r\n\
-         Content-Type: application/json; charset=UTF-8\r\n\r\n\
-         {metadata}\r\n\
-         --{boundary}--\r\n",
-    );
-
-    let content_type = format!("multipart/related; boundary={boundary}");
-
-    match Client::new()
-        .post(url)
-        .bearer_auth(token!(data))
-        .header("Content-Type", content_type)
-        .body(multipart)
-        .send()
-        .await
-    {
-        Ok(res) => match res.text().await {
-            Ok(text) => text,
-            Err(err) => {
-                format!("Failed to get text: {err}")
-            }
-        },
-        Err(err) => format!("Failed to post: {err}"),
+    match insure_folder_exists(token, APP_FOLDER).await {
+        Err(err) => err,
+        Ok(has) => format!("Your drive has {APP_FOLDER}\nData:\n{has:?}"),
     }
 }

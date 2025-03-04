@@ -8,7 +8,6 @@ const DEFAULT_PORT: u16 = 8080;
 const HOST: &str = "HOST";
 const PORT: &str = "PORT";
 
-#[expect(clippy::print_stderr, reason = "logging to warn on defaults")]
 pub fn get_url() -> (String, u16) {
     if dotenv::from_filename(LOCAL_ENV_PATH).is_err() {
         eprintln!(
