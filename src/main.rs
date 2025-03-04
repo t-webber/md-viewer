@@ -30,15 +30,17 @@ struct AppState {
     counter: Mutex<i32>,
     credentials: GoogleAuthCredentials,
     client_oauth_data: Mutex<Option<ClientOAuthData>>,
+    cache: Mutex<Option<String>>,
 }
 
 impl AppState {
     fn new() -> Self {
         Self {
             app_name: APP_NAME,
-            counter: Mutex::new(0),
             credentials: dbg!(get_credentials().unwrap()),
-            client_oauth_data: Mutex::new(None),
+            cache: Default::default(),
+            counter: Default::default(),
+            client_oauth_data: Default::default(),
         }
     }
 

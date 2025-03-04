@@ -1,6 +1,6 @@
 use actix_web::web;
 use drive::ls_drive;
-use login::{google_callback, google_login, profile_info};
+use login::{callback_error, google_callback, google_login, profile_info};
 use reqwest::RequestBuilder;
 
 pub mod credentials;
@@ -19,6 +19,7 @@ async fn send_and_text(req: RequestBuilder) -> Result<String, String> {
 
 pub fn auth_config(cfg: &mut web::ServiceConfig) {
     cfg.service(google_callback)
+        .service(callback_error)
         .service(google_login)
         .service(ls_drive)
         .service(profile_info);
