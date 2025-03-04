@@ -1,7 +1,10 @@
 use std::{env::set_var, sync::Mutex};
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
-use auth::credentials::{GoogleAuthCredentials, get_credentials};
+use auth::{
+    ClientOAuthData,
+    credentials::{GoogleAuthCredentials, get_credentials},
+};
 
 mod auth;
 mod counter;
@@ -26,7 +29,7 @@ struct AppState {
     app_name: &'static str,
     counter: Mutex<i32>,
     credentials: GoogleAuthCredentials,
-    google_token: Mutex<Option<String>>,
+    client_oauth_data: Mutex<Option<ClientOAuthData>>,
 }
 
 impl AppState {
@@ -35,7 +38,7 @@ impl AppState {
             app_name: APP_NAME,
             counter: Mutex::new(0),
             credentials: dbg!(get_credentials().unwrap()),
-            google_token: Mutex::new(None),
+            client_oauth_data: Mutex::new(None),
         }
     }
 }
