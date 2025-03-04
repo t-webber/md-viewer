@@ -2,8 +2,8 @@ use std::{env::set_var, sync::Mutex};
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use auth::{
-    ClientOAuthData,
     credentials::{GoogleAuthCredentials, get_credentials},
+    login::ClientOAuthData,
 };
 
 mod auth;
@@ -39,6 +39,16 @@ impl AppState {
             counter: Mutex::new(0),
             credentials: dbg!(get_credentials().unwrap()),
             client_oauth_data: Mutex::new(None),
+        }
+    }
+
+    fn to_token(&self) -> Result<String, String> {
+        match self.client_oauth_data.lock().as_ref() {
+            Err(err) => Err(format!("Failed to get global state:\n{err}")),
+            Ok(data) => match data.as_ref() {
+                Some(data) => Ok(data.to_token()),
+                None => Err("User not logged in. Please go to /auth/login".to_owned()),
+            },
         }
     }
 }
