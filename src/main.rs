@@ -35,6 +35,7 @@
     clippy::question_mark_used,
     clippy::mod_module_files,
     clippy::module_name_repetitions,
+    clippy::arbitrary_source_item_ordering,
     // clippy::pub_with_shorthand,
     // clippy::unseparated_literal_suffix,
     reason = "style"
@@ -42,84 +43,30 @@
 #![expect(clippy::missing_docs_in_private_items, reason = "lazy")]
 #![expect(clippy::exhaustive_structs, reason = "needed by actix")]
 #![expect(clippy::print_stderr, reason = "logging is good")]
+#![allow(clippy::future_not_send, reason = "todo")]
+#![allow(clippy::significant_drop_tightening, reason = "todo")]
 
 mod api;
 mod auth;
 mod counter;
 mod drive;
+mod state;
 mod url;
 
 use actix_web::{App, HttpResponse, HttpServer, web};
-use auth::{
-    credentials::{GoogleAuthCredentials, get_credentials},
-    login::ClientOAuthData,
-};
-use core::sync::atomic::AtomicI32;
+use state::{AppData, AppState};
 use std::env::set_var;
 use std::io;
-use std::sync::Mutex;
 
-#[macro_export]
-macro_rules! ok_or_internal {
-    ($value:expr) => {
-        match $value {
-            Ok(val) => actix_web::HttpResponse::Ok().body(val),
-            Err(err) => actix_web::HttpResponse::InternalServerError().body(err),
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! token {
-    ($data:ident) => {
-        &match $data.to_token() {
-            Ok(token) => token,
-            Err(err) => return actix_web::HttpResponse::InternalServerError().body(err),
-        }
-    };
-}
-
-const APP_NAME: &str = "mdViewer";
 const LOCAL_ENV_PATH: &str = ".env";
 
-#[derive(Debug)]
-struct AppState {
-    app_name: &'static str,
-    cache: Mutex<Option<String>>,
-    client_oauth_data: Mutex<Option<ClientOAuthData>>,
-    counter: AtomicI32,
-    credentials: GoogleAuthCredentials,
-}
-
-impl AppState {
-    fn new() -> Result<web::Data<Self>, String> {
-        Ok(web::Data::new(Self {
-            app_name: APP_NAME,
-            credentials: get_credentials()?,
-            cache: Mutex::default(),
-            counter: AtomicI32::default(),
-            client_oauth_data: Mutex::default(),
-        }))
-    }
-
-    fn to_token(&self) -> Result<String, String> {
-        match self.client_oauth_data.lock().as_ref() {
-            Err(err) => Err(format!("Failed to get global state:\n{err}")),
-            Ok(data_guard) => data_guard.as_ref().map_or_else(
-                || Err("User not logged in. Please go to /auth/login".to_owned()),
-                |data| Ok(data.as_token().to_owned()),
-            ),
-        }
-    }
-}
-
 #[actix_web::get("/")]
-async fn hello(data: web::Data<AppState>) -> HttpResponse {
-    HttpResponse::Ok().body(format!("Hello world in {}!", data.app_name))
+async fn hello(data: AppData) -> HttpResponse {
+    HttpResponse::Ok().body(format!("Hello world in {}!", data.as_app_name()))
 }
 
 #[actix_web::get("/debug")]
-async fn debug(data: web::Data<AppState>) -> HttpResponse {
+async fn debug(data: AppData) -> HttpResponse {
     HttpResponse::Ok().body(format!("{data:?}"))
 }
 

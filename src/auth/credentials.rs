@@ -21,7 +21,7 @@ impl GoogleAuthCredentials {
     pub const fn as_redirect_uri(&self) -> &String {
         &self.redirect_uri
     }
-    pub fn make_params<'code, 'db: 'code>(
+    pub fn as_params<'code, 'db: 'code>(
         &'db self,
         code: &'code str,
     ) -> [(&'code str, &'code str); 5] {
