@@ -1,14 +1,20 @@
+use core::result;
 use core::sync::atomic::AtomicI32;
 use std::sync::{Mutex, MutexGuard};
 
 use actix_web::{HttpRequest, HttpResponse, web};
 
-use crate::auth::{
-    credentials::{GoogleAuthCredentials, get_credentials},
-    login::ClientOAuthData,
+use crate::{
+    auth::{
+        credentials::{GoogleAuthCredentials, get_credentials},
+        login::ClientOAuthData,
+    },
+    drive::manager::DriveManager,
 };
 
 pub type AppData = web::Data<AppState>;
+
+type Result<T, E = String> = result::Result<T, E>;
 
 #[derive(Debug)]
 pub struct AppState {
@@ -17,18 +23,17 @@ pub struct AppState {
     client_oauth_data: Mutex<Option<ClientOAuthData>>,
     counter: AtomicI32,
     credentials: GoogleAuthCredentials,
-    root_folder: &'static str,
-    root_folder_id: Mutex<Option<String>>,
+    drive: DriveManager,
 }
 
-pub fn ok_or_internal(value: Result<String, String>) -> HttpResponse {
+pub fn ok_or_internal(value: Result<String>) -> HttpResponse {
     match value {
         Ok(val) => HttpResponse::Ok().body(val),
         Err(err) => HttpResponse::InternalServerError().body(err),
     }
 }
 
-pub fn map_err_internal<T>(value: Result<T, String>) -> Result<T, HttpResponse> {
+pub fn map_err_internal<T>(value: Result<T>) -> Result<T, HttpResponse> {
     value.map_err(|err| HttpResponse::InternalServerError().body(err))
 }
 
@@ -67,8 +72,7 @@ impl AppState {
             counter: AtomicI32::default(),
             client_oauth_data: Mutex::default(),
             callback: Mutex::default(),
-            root_folder: "___@@@md-viewer@@@___",
-            root_folder_id: Mutex::default(),
+            drive: DriveManager::default(),
         }))
     }
 
@@ -98,12 +102,16 @@ impl AppState {
         &self.credentials
     }
 
-    fn set_callback(&self, new_callback: String) -> Result<(), String> {
+    pub const fn as_drive(&self) -> &DriveManager {
+        &self.drive
+    }
+
+    fn set_callback(&self, new_callback: String) -> Result<()> {
         unlock(&self.callback, "callback")
             .map(|mut old_callback| *old_callback = Some(new_callback))
     }
 
-    pub fn take_callback(&self) -> Result<String, String> {
+    pub fn take_callback(&self) -> Result<String> {
         unlock(&self.callback, "callback")
             .map(|mut callback| callback.take().unwrap_or_else(|| "/auth/info".to_owned()))
     }
@@ -122,9 +130,9 @@ fn lock_error_msg(data_type: &str, err: &impl ToString) -> String {
     )
 }
 
-fn unlock<'data, T>(
+pub fn unlock<'data, T>(
     data: &'data Mutex<T>,
     data_type: &'static str,
-) -> Result<MutexGuard<'data, T>, String> {
+) -> Result<MutexGuard<'data, T>> {
     data.lock().map_err(|err| lock_error_msg(data_type, &err))
 }

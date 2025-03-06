@@ -25,9 +25,9 @@
 #![expect(
     clippy::single_call_fn,
     clippy::implicit_return,
+    clippy::pattern_type_mismatch,
     // clippy::missing_trait_methods,
     // clippy::else_if_without_else,
-    // clippy::pattern_type_mismatch,
     reason = "bad lint"
 )]
 #![expect(clippy::blanket_clippy_restriction_lints, reason = "Enable all lints")]
@@ -40,7 +40,7 @@
     // clippy::unseparated_literal_suffix,
     reason = "style"
 )]
-#![expect(clippy::missing_docs_in_private_items, reason = "lazy")]
+#![allow(clippy::missing_docs_in_private_items, reason = "lazy")]
 #![expect(clippy::exhaustive_structs, reason = "needed by actix")]
 #![expect(clippy::print_stderr, reason = "logging is good")]
 #![allow(clippy::future_not_send, reason = "todo")]
@@ -54,6 +54,7 @@ mod state;
 mod url;
 
 use actix_web::{App, HttpResponse, HttpServer, web};
+use drive::routes::drive_config;
 use state::{AppData, AppState};
 use std::env::set_var;
 use std::io;
@@ -71,12 +72,13 @@ async fn debug(data: AppData) -> HttpResponse {
 }
 
 fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(hello)
+    cfg //
+        .service(hello)
         .service(debug)
+        .default_service(web::to(not_found))
         .service(web::scope("/auth").configure(auth::auth_config))
-        .service(web::scope("/counter").configure(counter::counter_config))
-        .service(web::scope("/drive").configure(drive::drive_config))
-        .default_service(web::to(not_found));
+        .service(web::scope("/drive").configure(drive_config))
+        .service(web::scope("/counter").configure(counter::counter_config));
 }
 
 async fn not_found() -> HttpResponse {

@@ -2,12 +2,9 @@ use actix_web::{HttpRequest, HttpResponse, web};
 
 use crate::{
     AppData,
-    drive::{
-        APP_FOLDER, app_folder_id, get_file_metadata, insure_folder_contains_file,
-        insure_root_contains_file, load_files,
-    },
+    drive::{FileType, get_file_metadata, insure_root_contains_file, load_files},
     state::ok_or_internal,
-    token,
+    token, unwrap_return_internal,
 };
 
 #[actix_web::get("/folder/id/{id}")]
@@ -30,20 +27,20 @@ async fn display_folder(
 }
 
 #[actix_web::get("/file/id/{id}")]
-async fn see_file(data: AppData, req: HttpRequest, path: web::Path<(String,)>) -> HttpResponse {
+async fn display_file(data: AppData, req: HttpRequest, path: web::Path<(String,)>) -> HttpResponse {
     ok_or_internal(get_file_metadata(token!(data, req), &path.into_inner().0).await)
 }
 
-#[actix_web::get("/has_blob")]
-async fn route_has_blob(req: HttpRequest, data: AppData) -> HttpResponse {
-    match insure_root_contains_file(token!(data, req), APP_FOLDER, "folder").await {
-        Err(err) => HttpResponse::InternalServerError().body(err),
-        Ok(has) => HttpResponse::Ok().body(format!("Your drive has {APP_FOLDER}\nData:\n{has:?}")),
-    }
+#[actix_web::get("/app-folder")]
+async fn app_folder(req: HttpRequest, data: AppData) -> HttpResponse {
+    HttpResponse::Ok().body(format!(
+        "The id of the app folder is:\n{}",
+        unwrap_return_internal!(data.as_drive().app_folder_id(token!(data, req)).await)
+    ))
 }
 
-#[actix_web::get("/root")]
-async fn ls_drive(req: HttpRequest, data: AppData) -> HttpResponse {
+#[actix_web::get("/root/all")]
+async fn ls_root(req: HttpRequest, data: AppData) -> HttpResponse {
     ok_or_internal(
         load_files(&[("q", "'root' in parents")], token!(data, req))
             .await
@@ -54,37 +51,40 @@ async fn ls_drive(req: HttpRequest, data: AppData) -> HttpResponse {
     )
 }
 
-#[actix_web::get("/type/{file_type}")]
-async fn ls_type(req: HttpRequest, data: AppData, path: web::Path<(String,)>) -> HttpResponse {
+#[actix_web::get("/root/type/{file_type}")]
+async fn ls_root_type(req: HttpRequest, data: AppData, path: web::Path<(String,)>) -> HttpResponse {
     ok_or_internal(
         load_files(&[("q", "'root' in parents")], token!(data, req))
             .await
             .and_then(|files| {
-                serde_json::to_string_pretty(&files.filter_with_type(&path.into_inner().0))
-                    .map_err(|err| format!("Failed to serialise:\n{err}"))
+                let filetype = path.into_inner().0;
+                FileType::from_str(&filetype).map_or_else(
+                    || Err(format!("Invalid file type {filetype}.")),
+                    |parsed_filetype| {
+                        serde_json::to_string_pretty(&files.filter_with_type(&parsed_filetype))
+                            .map_err(|err| format!("Failed to serialise:\n{err}"))
+                    },
+                )
             }),
     )
 }
 
-#[actix_web::get("/hello")]
+#[actix_web::get("/root/make_hello")]
 async fn make_hello(req: HttpRequest, data: AppData) -> HttpResponse {
-    match app_folder_id(token!(data, req)).await {
-        Ok(folder_id) => {
-            match insure_folder_contains_file(
-                token!(data, req),
-                "file_eg",
-                "document",
-                APP_FOLDER,
-                &folder_id,
-            )
-            .await
-            {
-                Err(err) => HttpResponse::InternalServerError().body(err),
-                Ok(has) => {
-                    HttpResponse::Ok().body(format!("{APP_FOLDER}/file_eg exists!\nData:\n{has:?}"))
-                }
-            }
-        }
+    match insure_root_contains_file(token!(data, req), "hello", &FileType::Document).await {
         Err(err) => HttpResponse::InternalServerError().body(err),
+        Ok(has) => HttpResponse::Ok().body(format!(
+            "A document named hello at the root now exists!\nData:\n{has:?}"
+        )),
     }
+}
+
+pub fn drive_config(cfg: &mut web::ServiceConfig) {
+    cfg //
+        .service(display_folder)
+        .service(display_file)
+        .service(app_folder)
+        .service(ls_root)
+        .service(ls_root_type)
+        .service(make_hello);
 }
