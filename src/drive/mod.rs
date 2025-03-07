@@ -8,7 +8,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::api::send_and_text;
+use crate::{api::send_and_text, log};
 
 type Result<T, E = String> = result::Result<T, E>;
 
@@ -80,20 +80,16 @@ impl DriveFileList {
 }
 
 async fn create_file(token: &str, filename: &str, filetype: &FileType) -> Result<DriveFile> {
-    eprintln!("File {filename} not found. Creating...");
-
-    let url = "https://www.googleapis.com/drive/v3/files";
-
-    let metadata = json!({
-        "name": filename,
-        "mimeType": filetype.as_mime_type()
-    });
+    log!("File {filename} not found. Creating...");
 
     match Client::new()
-        .post(url)
+        .post("https://www.googleapis.com/drive/v3/files")
         .bearer_auth(token)
         .header("Content-Type", "application/json")
-        .json(&metadata)
+        .json(&json!({
+            "name": filename,
+            "mimeType": filetype.as_mime_type()
+        }))
         .send()
         .await
     {
@@ -107,8 +103,7 @@ async fn create_file(token: &str, filename: &str, filetype: &FileType) -> Result
 }
 
 async fn create_folder(token: &str, filename: &str) -> Result<DriveFile> {
-    eprintln!("File {filename} not found. Creating...");
-    let url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+    log!("File {filename} not found. Creating...");
 
     let metadata = json!({
         "name": filename,
@@ -127,7 +122,7 @@ async fn create_folder(token: &str, filename: &str) -> Result<DriveFile> {
     let content_type = format!("multipart/related; boundary={boundary}");
 
     match Client::new()
-        .post(url)
+        .post("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
         .bearer_auth(token)
         .header("Content-Type", content_type)
         .body(multipart)

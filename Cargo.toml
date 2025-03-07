@@ -6,6 +6,7 @@ license-file = "LICENSE"
 
 [dependencies]
 actix-web = "4"
+async-lock = "3.4.0"
 dotenv = "0.15.0"
 env_logger = "0"
 reqwest = { version = "0.12.12", features = ["json"] }

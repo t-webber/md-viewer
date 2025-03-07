@@ -1,12 +1,3 @@
-use std::env;
-
-use crate::LOCAL_ENV_PATH;
-
-const ERR_PREFIX: &str = "Failed to fetch Google OAuth2 credentials: ";
-const ID: &str = "ID";
-const REDIRECT_URI: &str = "REDIRECT_URI";
-const SECRET: &str = "SECRET";
-
 #[derive(Debug)]
 pub struct GoogleAuthCredentials {
     id: String,
@@ -33,20 +24,12 @@ impl GoogleAuthCredentials {
             ("grant_type", "authorization_code"),
         ]
     }
-}
 
-pub fn get_credentials() -> Result<GoogleAuthCredentials, String> {
-    dotenv::from_filename(LOCAL_ENV_PATH)
-        .map_err(|_err| format!("{ERR_PREFIX}Missing `{LOCAL_ENV_PATH}` file."))?;
-
-    Ok(GoogleAuthCredentials {
-        id: get_var(ID)?,
-        secret: get_var(SECRET)?,
-        redirect_uri: get_var(REDIRECT_URI)?,
-    })
-}
-
-fn get_var(env_var: &str) -> Result<String, String> {
-    env::var(env_var)
-        .map_err(|_err| format!("{ERR_PREFIX}Missing variable `{env_var}` in `{LOCAL_ENV_PATH}`"))
+    pub const fn new(id: String, redirect_uri: String, secret: String) -> Self {
+        Self {
+            id,
+            redirect_uri,
+            secret,
+        }
+    }
 }

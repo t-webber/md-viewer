@@ -50,16 +50,22 @@ mod api;
 mod auth;
 mod counter;
 mod drive;
+mod settings;
 mod state;
-mod url;
 
 use actix_web::{App, HttpResponse, HttpServer, web};
 use drive::routes::drive_config;
+use settings::load_env;
 use state::{AppData, AppState};
 use std::env::set_var;
 use std::io;
 
-const LOCAL_ENV_PATH: &str = ".env";
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => {{
+        eprintln!("\x1b[93m >>> {}\x1b[0m", format!($($arg)*));
+    }};
+}
 
 #[actix_web::get("/")]
 async fn hello(data: AppData) -> HttpResponse {
@@ -94,10 +100,11 @@ async fn main() -> io::Result<()> {
     };
     env_logger::init();
 
-    let data = AppState::new().map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+    let settings = load_env().map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+    let data = AppState::new(settings.credentials, settings.app_folder);
 
     HttpServer::new(move || App::new().configure(config).app_data(data.clone()))
-        .bind(url::get_url())?
+        .bind(settings.addr)?
         .run()
         .await
 }

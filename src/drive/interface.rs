@@ -9,9 +9,10 @@ pub fn interface_config(cfg: &mut web::ServiceConfig) {
 }
 
 use reqwest::Client;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::{
+    log,
     state::{AppData, ok_or_internal},
     token, unwrap_return_internal,
 };
@@ -54,72 +55,65 @@ async fn set_content(
 }
 
 async fn create_file_with_name(name: &str, folder_id: &str, token: &str) -> Result<String, String> {
-    let url = "https://www.googleapis.com/drive/v3/files";
-
-    let metadata = json!({
-        "name": name,
-        "parents": [folder_id],
-        "mimeType": "application/vnd.google-apps.document"
-    });
-
-    let client = Client::new();
-    let response = client
-        .post(url)
-        .bearer_auth(token)
-        .header("Content-Type", "application/json")
-        .json(&metadata)
-        .send()
-        .await
-        .map_err(|err| err.to_string())?;
-
-    let text = response.text().await.map_err(|err| err.to_string())?;
-    let json: serde_json::Value = serde_json::from_str(&text).map_err(|err| err.to_string())?;
-
-    json.get("id")
-        .and_then(|id| id.as_str().map(String::from))
-        .ok_or_else(|| "Failed to get file ID".to_owned())
+    serde_json::from_str::<Value>(
+        &Client::new()
+            .post("https://www.googleapis.com/drive/v3/files")
+            .bearer_auth(token)
+            .header("Content-Type", "application/json")
+            .json(&json!({
+                "name": name,
+                "parents": [folder_id],
+                "mimeType": "application/vnd.google-apps.document"
+            }))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?
+            .text()
+            .await
+            .map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?
+    .get("id")
+    .and_then(|id| id.as_str())
+    .map(str::to_owned)
+    .ok_or_else(|| "Failed to get file ID".to_owned())
 }
 
 async fn get_file_content(id: &str, token: &str) -> Result<String, String> {
-    let url = format!("https://www.googleapis.com/drive/v3/files/{id}/export?mimeType=text/plain");
-
-    let client = Client::new();
-    let response = client
-        .get(url)
+    Client::new()
+        .get(format!(
+            "https://www.googleapis.com/drive/v3/files/{id}/export?mimeType=text/plain"
+        ))
         .bearer_auth(token)
         .send()
         .await
-        .map_err(|err| err.to_string())?;
-
-    response.text().await.map_err(|err| err.to_string())
+        .map_err(|err| err.to_string())?
+        .text()
+        .await
+        .map_err(|err| err.to_string())
 }
 
 async fn get_document_length(id: &str, token: &str) -> Result<i32, String> {
-    let url = format!("https://docs.googleapis.com/v1/documents/{id}");
-
-    let client = Client::new();
-    let response = client
-        .get(&url)
+    let response = Client::new()
+        .get(format!("https://docs.googleapis.com/v1/documents/{id}"))
         .bearer_auth(token)
         .send()
         .await
         .map_err(|err| err.to_string())?;
 
     if response.status().is_success() {
-        let json_response: serde_json::Value = response
-            .json()
+        response
+            .json::<Value>()
             .await
-            .map_err(|err| format!("Invalid response:\n{err}"))?;
-        if let Some(end_index) = json_response
+            .map_err(|err| format!("Invalid response:\n{err}"))?
             .get("body")
             .and_then(|value| value.get("content"))
             .and_then(|value| value.as_array())
-            .and_then(|c| c.last())
-            .and_then(|last_element| last_element["endIndex"].as_i64())
-        {
-            return Ok(end_index as i32);
-        }
-        Err("Failed to find document end index.".to_owned())
+            .and_then(|value| value.last())
+            .and_then(|value| value.get("endIndex"))
+            .and_then(Value::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .map_or_else(|| Err("Failed to find document end index.".to_owned()), Ok)
     } else {
         Err(format!(
             "Failed to retrieve document info: {}",
@@ -132,14 +126,13 @@ async fn get_document_length(id: &str, token: &str) -> Result<i32, String> {
 }
 
 async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String, String> {
-    let url = format!("https://docs.googleapis.com/v1/documents/{id}:batchUpdate");
-
-    println!("Updating file {id} with {content}.");
-
-    let end = dbg!(get_document_length(id, token).await?) - 1;
+    let end = get_document_length(id, token).await?.saturating_sub(1);
+    log!(
+        "Updating file {id} (current len = {}) with {content}.",
+        end.saturating_sub(1)
+    );
 
     let request_body = if end <= 1i32 {
-        println!(">>>>>>>>>> Old empty");
         json!({
             "requests": [
                 {
@@ -156,7 +149,6 @@ async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String
             ]
         })
     } else if content.is_empty() {
-        println!(">>>>>>>>>> New empty");
         json!({
             "requests": [
                 {
@@ -172,7 +164,6 @@ async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String
             ]
         })
     } else {
-        println!(">>>>>>>>>> Nothing empty");
         json!({
             "requests": [
                 {
@@ -200,9 +191,10 @@ async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String
         })
     };
 
-    let client = Client::new();
-    let response = client
-        .post(url)
+    let response = Client::new()
+        .post(format!(
+            "https://docs.googleapis.com/v1/documents/{id}:batchUpdate"
+        ))
         .bearer_auth(token)
         .header("Content-Type", "application/json")
         .json(&request_body)

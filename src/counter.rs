@@ -13,9 +13,12 @@ async fn get_counter(data: Data<AppState>) -> String {
 
 #[actix_web::get("/incr")]
 async fn incr_counter(data: Data<AppState>) -> String {
-    let old = data.as_counter().load(atomic::Ordering::Relaxed);
-    data.as_counter()
-        .store(old.saturating_add(1), atomic::Ordering::Release);
+    data.as_counter().store(
+        data.as_counter()
+            .load(atomic::Ordering::Relaxed)
+            .saturating_add(1),
+        atomic::Ordering::Release,
+    );
     data.as_counter()
         .load(atomic::Ordering::Acquire)
         .to_string()

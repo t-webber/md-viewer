@@ -5,10 +5,7 @@ use std::sync::{Mutex, MutexGuard};
 use actix_web::{HttpRequest, HttpResponse, web};
 
 use crate::{
-    auth::{
-        credentials::{GoogleAuthCredentials, get_credentials},
-        login::ClientOAuthData,
-    },
+    auth::{credentials::GoogleAuthCredentials, login::ClientOAuthData},
     drive::manager::DriveManager,
 };
 
@@ -65,15 +62,15 @@ macro_rules! unwrap_return_internal {
 }
 
 impl AppState {
-    pub fn new() -> Result<web::Data<Self>, String> {
-        Ok(web::Data::new(Self {
+    pub fn new(credentials: GoogleAuthCredentials, app_folder: String) -> web::Data<Self> {
+        web::Data::new(Self {
             app_name: "mdViewer",
-            credentials: get_credentials()?,
+            credentials,
             counter: AtomicI32::default(),
             client_oauth_data: Mutex::default(),
             callback: Mutex::default(),
-            drive: DriveManager::default(),
-        }))
+            drive: DriveManager::new(app_folder),
+        })
     }
 
     pub fn to_token(&self, req: &HttpRequest) -> Result<String, HttpResponse> {
