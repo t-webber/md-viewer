@@ -1,222 +1,158 @@
-use actix_web::{HttpRequest, HttpResponse, web};
-
-pub fn interface_config(cfg: &mut web::ServiceConfig) {
-    cfg //
-        .service(create_name)
-        .service(get_content)
-        .service(get_doc_len)
-        .service(set_content);
-}
+use core::result;
 
 use reqwest::Client;
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
-use crate::{
-    log,
-    state::{AppData, ok_or_internal},
-    token, unwrap_return_internal,
-};
+use crate::{api::send_and_text, log};
 
-#[actix_web::get("/create/{name}")]
-async fn create_name(data: AppData, req: HttpRequest, path: web::Path<(String,)>) -> HttpResponse {
-    let token = token!(data, req);
-    ok_or_internal(
-        create_file_with_name(
-            &path.into_inner().0,
-            &unwrap_return_internal!(data.as_drive().app_folder_id(token).await),
-            token,
-        )
-        .await,
-    )
+type Result<T, E = String> = result::Result<T, E>;
+
+#[derive(Deserialize, Serialize, Debug)]
+#[expect(non_snake_case, reason = "needed by serde")]
+pub struct DriveFile {
+    id: String,
+    kind: String,
+    mimeType: String,
+    name: String,
 }
 
-#[actix_web::get("/get-doc-len/{id}")]
-async fn get_doc_len(data: AppData, req: HttpRequest, path: web::Path<(String,)>) -> HttpResponse {
-    ok_or_internal(
-        get_document_length(&path.into_inner().0, token!(data, req))
-            .await
-            .map(|len| len.to_string()),
-    )
-}
-
-#[actix_web::get("/get-content/{id}")]
-async fn get_content(data: AppData, req: HttpRequest, path: web::Path<(String,)>) -> HttpResponse {
-    ok_or_internal(get_file_content(&path.into_inner().0, token!(data, req)).await)
-}
-
-#[actix_web::post("/set-content/{id}")]
-async fn set_content(
-    data: AppData,
-    req: HttpRequest,
-    content: String,
-    path: web::Path<(String,)>,
-) -> HttpResponse {
-    ok_or_internal(set_file_content(&path.into_inner().0, &content, token!(data, req)).await)
-}
-
-async fn create_file_with_name(name: &str, folder_id: &str, token: &str) -> Result<String, String> {
-    serde_json::from_str::<Value>(
-        &Client::new()
-            .post("https://www.googleapis.com/drive/v3/files")
-            .bearer_auth(token)
-            .header("Content-Type", "application/json")
-            .json(&json!({
-                "name": name,
-                "parents": [folder_id],
-                "mimeType": "application/vnd.google-apps.document"
-            }))
-            .send()
-            .await
-            .map_err(|err| err.to_string())?
-            .text()
-            .await
-            .map_err(|err| err.to_string())?,
-    )
-    .map_err(|err| err.to_string())?
-    .get("id")
-    .and_then(|id| id.as_str())
-    .map(str::to_owned)
-    .ok_or_else(|| "Failed to get file ID".to_owned())
-}
-
-async fn get_file_content(id: &str, token: &str) -> Result<String, String> {
-    Client::new()
-        .get(format!(
-            "https://www.googleapis.com/drive/v3/files/{id}/export?mimeType=text/plain"
-        ))
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|err| err.to_string())?
-        .text()
-        .await
-        .map_err(|err| err.to_string())
-}
-
-async fn get_document_length(id: &str, token: &str) -> Result<i32, String> {
-    let response = Client::new()
-        .get(format!("https://docs.googleapis.com/v1/documents/{id}"))
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|err| err.to_string())?;
-
-    if response.status().is_success() {
-        response
-            .json::<Value>()
-            .await
-            .map_err(|err| format!("Invalid response:\n{err}"))?
-            .get("body")
-            .and_then(|value| value.get("content"))
-            .and_then(|value| value.as_array())
-            .and_then(|value| value.last())
-            .and_then(|value| value.get("endIndex"))
-            .and_then(Value::as_i64)
-            .and_then(|value| i32::try_from(value).ok())
-            .map_or_else(|| Err("Failed to find document end index.".to_owned()), Ok)
-    } else {
-        Err(format!(
-            "Failed to retrieve document info: {}",
-            response
-                .text()
-                .await
-                .map_err(|err| format!("Response has invalid text:\n{err}"))?
-        ))
+impl DriveFile {
+    pub fn to_id(&self) -> Box<str> {
+        self.id.clone().into_boxed_str()
     }
 }
 
-async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String, String> {
-    let end = get_document_length(id, token).await?.saturating_sub(1);
-    log!(
-        "Updating file {id} (current len = {}) with {content}.",
-        end.saturating_sub(1)
+macro_rules! make_file_type {
+    ($($pascal:ident $str:expr,)*) => {
+        pub enum FileType {
+            $($pascal,)*
+        }
+
+        impl FileType {
+            pub fn from_str(value: &str) -> Option<Self> {
+                match value {
+                    $($str => Some(Self::$pascal),)*
+                    _ => None
+                }
+            }
+
+            const fn as_str(&self) -> &str {
+                match self {
+                    $(Self::$pascal => $str,)*
+                }
+            }
+        }
+    };
+}
+
+impl FileType {
+    fn as_mime_type(&self) -> String {
+        format!("application/vnd.google-apps.{}", self.as_str())
+    }
+}
+
+make_file_type!(
+    Document "document",
+    Spreadsheet "spreadsheet",
+    Folder "folder",
+);
+
+#[derive(Deserialize, Serialize)]
+#[expect(non_snake_case, reason = "needed by serde")]
+pub struct DriveFileList {
+    files: Box<[DriveFile]>,
+    incompleteSearch: bool,
+    kind: String,
+}
+
+impl DriveFileList {
+    pub fn filter_with_type(self, filetype: &FileType) -> Box<[DriveFile]> {
+        self.files
+            .into_iter()
+            .filter(|file| file.mimeType == filetype.as_mime_type())
+            .collect()
+    }
+
+    fn find(self, filename: &str, filetype: &FileType) -> Option<DriveFile> {
+        self.files
+            .into_iter()
+            .find(|file| file.name == filename && file.mimeType == filetype.as_mime_type())
+    }
+}
+
+pub async fn create_folder(token: &str, filename: &str) -> Result<DriveFile> {
+    log!("File {filename} not found. Creating...");
+
+    let metadata = json!({
+        "name": filename,
+        "mimeType": format!("application/vnd.google-apps.folder")
+    })
+    .to_string();
+
+    let boundary = "boundary";
+    let multipart = format!(
+        "--{boundary}\r\n\
+         Content-Type: application/json; charset=UTF-8\r\n\r\n\
+         {metadata}\r\n\
+         --{boundary}--\r\n",
     );
 
-    let request_body = if end <= 1i32 {
-        json!({
-            "requests": [
-                {
-                    "insertText": {
-                        "text": content,
-                        "location":  {
-                            // "segmentId" empty for body
-                            // "tabId" empty for "singular tab"?
-                            "index": 1i32,
+    let content_type = format!("multipart/related; boundary={boundary}");
 
-                        }
-                    }
-                }
-            ]
-        })
-    } else if content.is_empty() {
-        json!({
-            "requests": [
-                {
-                    "deleteContentRange": {
-                        "range": {
-                            // "segmentId"
-                            // "tabId"
-                            "startIndex": 1i32,
-                            "endIndex": end,
-                        }
-                    },
-                }
-            ]
-        })
-    } else {
-        json!({
-            "requests": [
-                {
-                    "deleteContentRange": {
-                        "range": {
-                            // "segmentId"
-                            // "tabId"
-                            "startIndex": 1i32,
-                            "endIndex": end,
-                        }
-                    },
-                },
-                {
-                    "insertText": {
-                        "text": content,
-                        "location":  {
-                            // "segmentId"
-                            // "tabId"
-                            "index": 1i32,
-
-                        }
-                    }
-                }
-            ]
-        })
-    };
-
-    let response = Client::new()
-        .post(format!(
-            "https://docs.googleapis.com/v1/documents/{id}:batchUpdate"
-        ))
+    match Client::new()
+        .post("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
         .bearer_auth(token)
-        .header("Content-Type", "application/json")
-        .json(&request_body)
+        .header("Content-Type", content_type)
+        .body(multipart)
         .send()
         .await
-        .map_err(|err| err.to_string())?;
-
-    if response.status().is_success() {
-        Ok(format!(
-            "File updated with content {content}\nResponse:\n{}",
-            response
-                .text()
-                .await
-                .map_err(|err| format!("Failed to get text from response:\n{err}"))?
-        ))
-    } else {
-        Err(format!(
-            "Failed to update content:\n{}",
-            response
-                .text()
-                .await
-                .map_err(|err| format!("Failed to get text from response:\n{err}"))?
-        ))
+    {
+        Ok(res) => match res.text().await {
+            Ok(text) => serde_json::from_str(&text)
+                .map_err(|err| format!("Failed to serialise response: {err}")),
+            Err(err) => Err(format!("Failed to get text: {err}")),
+        },
+        Err(err) => Err(format!("Failed to post: {err}")),
     }
+}
+
+pub async fn load_files(query: &[(&str, &str)], token: &str) -> Result<DriveFileList> {
+    send_and_text(
+        Client::new()
+            .get("https://www.googleapis.com/drive/v3/files")
+            .bearer_auth(token)
+            .query(query),
+    )
+    .await
+    .and_then(|stringified| {
+        serde_json::from_str(&stringified)
+            .map_err(|err| format!("Failed to deserialise on query {query:?}:\n{err}\n\nData (conversion objective was DriveFileList):\n{stringified}"))
+    })
+}
+
+pub async fn root_contains_file(
+    token: &str,
+    filename: &str,
+    filetype: &FileType,
+) -> Result<Option<DriveFile>> {
+    load_files(&[("q", "'root' in parents")], token)
+        .await
+        .map(|files| files.find(filename, filetype))
+}
+
+pub async fn get_file_metadata(token: &str, file_id: &str) -> Result<String> {
+    let url = format!("https://www.googleapis.com/drive/v3/files/{file_id}");
+
+    match Client::new().get(&url).bearer_auth(token).send().await {
+        Ok(res) => match res.text().await {
+            Ok(text) => Ok(text), // Contains file name and MIME type
+            Err(err) => Err(format!("Failed to get text: {err}")),
+        },
+        Err(err) => Err(format!("Failed to fetch metadata: {err}")),
+    }
+}
+
+pub async fn folder_contents(token: &str, folder_id: &str) -> Result<DriveFileList> {
+    load_files(&[("q", &format!("'{folder_id}' in parents"))], token).await
 }

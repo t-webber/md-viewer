@@ -3,7 +3,10 @@ use std::sync::{Mutex, MutexGuard};
 
 use actix_web::{HttpRequest, HttpResponse, web};
 
-use crate::google::{ClientOAuthData, DriveManager, GoogleAuthCredentials};
+use crate::google::{
+    auth::{credentials::GoogleAuthCredentials, login::ClientOAuthData},
+    drive::manager::DriveManager,
+};
 
 pub type AppData = web::Data<AppState>;
 
@@ -67,7 +70,7 @@ impl AppState {
         })
     }
 
-    pub fn to_token(&self, req: &HttpRequest) -> Result<String, HttpResponse> {
+    pub fn to_token(&self, req: &HttpRequest) -> Result<Box<str>, HttpResponse> {
         map_err_internal(unlock(&self.client_oauth_data, "client data"))?
             .as_ref()
             .map_or_else(
@@ -77,7 +80,7 @@ impl AppState {
                         .append_header(("Location", "/auth/login"))
                         .finish())
                 },
-                |client_data| Ok(client_data.as_token().to_owned()),
+                |client_data| Ok(client_data.as_token().to_owned().into_boxed_str()),
             )
     }
 

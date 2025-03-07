@@ -1,6 +1,9 @@
-use crate::log;
+use crate::{
+    google::drive::interface::{FileType, create_folder, root_contains_file},
+    log,
+};
 
-use super::{DriveFile, FileType, create_folder, root_contains_file};
+use super::interface::DriveFile;
 
 #[derive(Debug)]
 enum AppFolder {
@@ -29,7 +32,7 @@ impl DriveManager {
     pub async fn app_folder_id(&self, token: &str) -> Result<Box<str>, String> {
         let mut app_folder = self.app_folder.lock().await;
         Ok(match app_folder.inner() {
-            AppFolder::Info(folder) => folder.id.clone().into_boxed_str(),
+            AppFolder::Info(folder) => folder.to_id(),
             AppFolder::Name(name) => {
                 log!("App folder id not loaded");
                 let folder = if let Some(folder) =
@@ -40,7 +43,7 @@ impl DriveManager {
                     log!("App folder doesn't exist");
                     create_folder(token, name).await?
                 };
-                let id = folder.id.clone().into_boxed_str();
+                let id = folder.to_id();
                 *app_folder = AppFolder::Info(folder);
                 id
             }
