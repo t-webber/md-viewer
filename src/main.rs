@@ -36,8 +36,8 @@
     clippy::mod_module_files,
     clippy::module_name_repetitions,
     clippy::arbitrary_source_item_ordering,
+    clippy::unseparated_literal_suffix,
     // clippy::pub_with_shorthand,
-    // clippy::unseparated_literal_suffix,
     reason = "style"
 )]
 #![allow(clippy::missing_docs_in_private_items, reason = "lazy")]

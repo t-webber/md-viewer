@@ -7,6 +7,8 @@ use crate::{
     token, unwrap_return_internal,
 };
 
+use super::interface::interface_config;
+
 #[actix_web::get("/folder/id/{id}")]
 async fn display_folder(
     req: HttpRequest,
@@ -86,5 +88,6 @@ pub fn drive_config(cfg: &mut web::ServiceConfig) {
         .service(app_folder)
         .service(ls_root)
         .service(ls_root_type)
-        .service(make_hello);
+        .service(make_hello)
+        .service(web::scope("/interface").configure(interface_config));
 }
