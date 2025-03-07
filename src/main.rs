@@ -44,17 +44,13 @@
 #![expect(clippy::exhaustive_structs, reason = "needed by actix")]
 #![expect(clippy::print_stderr, reason = "logging is good")]
 #![allow(clippy::future_not_send, reason = "todo")]
-#![allow(clippy::significant_drop_tightening, reason = "todo")]
 
 mod api;
-mod auth;
-mod counter;
-mod drive;
+mod google;
 mod settings;
 mod state;
 
 use actix_web::{App, HttpResponse, HttpServer, web};
-use drive::routes::drive_config;
 use settings::load_env;
 use state::{AppData, AppState};
 use std::env::set_var;
@@ -79,12 +75,10 @@ async fn debug(data: AppData) -> HttpResponse {
 
 fn config(cfg: &mut web::ServiceConfig) {
     cfg //
+        .configure(google::google_config)
         .service(hello)
         .service(debug)
-        .default_service(web::to(not_found))
-        .service(web::scope("/auth").configure(auth::auth_config))
-        .service(web::scope("/drive").configure(drive_config))
-        .service(web::scope("/counter").configure(counter::counter_config));
+        .default_service(web::to(not_found));
 }
 
 async fn not_found() -> HttpResponse {

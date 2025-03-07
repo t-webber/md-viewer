@@ -2,7 +2,7 @@ use actix_web::{HttpRequest, HttpResponse, web};
 
 use crate::{
     AppData,
-    drive::{FileType, get_file_metadata, insure_root_contains_file, load_files},
+    google::drive::{FileType, get_file_metadata, insure_root_contains_file, load_files},
     state::ok_or_internal,
     token, unwrap_return_internal,
 };

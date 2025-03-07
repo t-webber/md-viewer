@@ -1,13 +1,9 @@
 use core::result;
-use core::sync::atomic::AtomicI32;
 use std::sync::{Mutex, MutexGuard};
 
 use actix_web::{HttpRequest, HttpResponse, web};
 
-use crate::{
-    auth::{credentials::GoogleAuthCredentials, login::ClientOAuthData},
-    drive::manager::DriveManager,
-};
+use crate::google::{ClientOAuthData, DriveManager, GoogleAuthCredentials};
 
 pub type AppData = web::Data<AppState>;
 
@@ -18,7 +14,6 @@ pub struct AppState {
     app_name: &'static str,
     callback: Mutex<Option<String>>,
     client_oauth_data: Mutex<Option<ClientOAuthData>>,
-    counter: AtomicI32,
     credentials: GoogleAuthCredentials,
     drive: DriveManager,
 }
@@ -66,7 +61,6 @@ impl AppState {
         web::Data::new(Self {
             app_name: "mdViewer",
             credentials,
-            counter: AtomicI32::default(),
             client_oauth_data: Mutex::default(),
             callback: Mutex::default(),
             drive: DriveManager::new(app_folder),
@@ -89,10 +83,6 @@ impl AppState {
 
     pub const fn as_app_name(&self) -> &str {
         self.app_name
-    }
-
-    pub const fn as_counter(&self) -> &AtomicI32 {
-        &self.counter
     }
 
     pub const fn as_credentials(&self) -> &GoogleAuthCredentials {

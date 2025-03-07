@@ -1,7 +1,7 @@
 use core::fmt::Display;
 use std::env::var;
 
-use crate::auth::credentials::GoogleAuthCredentials;
+use crate::google::GoogleAuthCredentials;
 
 const ERR_PREFIX: &str = "Failed to fetch Google OAuth2 credentials: ";
 
