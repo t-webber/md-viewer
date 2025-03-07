@@ -50,11 +50,12 @@ mod google;
 mod settings;
 mod state;
 
+use std::env::set_var;
+use std::io;
+
 use actix_web::{App, HttpResponse, HttpServer, web};
 use settings::load_env;
 use state::{AppData, AppState};
-use std::env::set_var;
-use std::io;
 
 #[macro_export]
 macro_rules! log {

@@ -11,11 +11,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 use reqwest::Client;
 use serde_json::{Value, json};
 
-use crate::{
-    log,
-    state::{AppData, ok_or_internal},
-    token, unwrap_return_internal,
-};
+use crate::state::{AppData, ok_or_internal};
+use crate::{log, token, unwrap_return_internal};
 
 #[actix_web::get("/create/{name}")]
 async fn create_name(data: AppData, req: HttpRequest, path: web::Path<(String,)>) -> HttpResponse {
@@ -127,10 +124,7 @@ async fn get_document_length(id: &str, token: &str) -> Result<i32, String> {
 
 async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String, String> {
     let end = get_document_length(id, token).await?.saturating_sub(1);
-    log!(
-        "Updating file {id} (current len = {}) with {content}.",
-        end.saturating_sub(1)
-    );
+    log!("Updating file {id} (current len = {}) with {content}.", end.saturating_sub(1));
 
     let request_body = if end <= 1i32 {
         json!({
@@ -192,9 +186,7 @@ async fn set_file_content(id: &str, content: &str, token: &str) -> Result<String
     };
 
     let response = Client::new()
-        .post(format!(
-            "https://docs.googleapis.com/v1/documents/{id}:batchUpdate"
-        ))
+        .post(format!("https://docs.googleapis.com/v1/documents/{id}:batchUpdate"))
         .bearer_auth(token)
         .header("Content-Type", "application/json")
         .json(&request_body)

@@ -5,10 +5,8 @@ pub mod manager;
 use actix_web::{HttpRequest, HttpResponse, web};
 use interface::folder_contents;
 
-use crate::{
-    state::{AppData, ok_or_internal},
-    token, unwrap_return_internal,
-};
+use crate::state::{AppData, ok_or_internal};
+use crate::{token, unwrap_return_internal};
 
 #[actix_web::get("/ls")]
 async fn ls(req: HttpRequest, data: AppData) -> HttpResponse {

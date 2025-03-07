@@ -4,7 +4,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{api::send_and_text, log};
+use crate::api::send_and_text;
+use crate::log;
 
 type Result<T, E = String> = result::Result<T, E>;
 

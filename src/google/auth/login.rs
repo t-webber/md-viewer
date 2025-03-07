@@ -1,14 +1,11 @@
-use actix_web::{
-    HttpRequest, HttpResponse, http,
-    web::{self, Redirect},
-};
+use actix_web::web::{self, Redirect};
+use actix_web::{HttpRequest, HttpResponse, http};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AppData, api::send_and_text, state::ok_or_internal, token, unwrap_return,
-    unwrap_return_internal,
-};
+use crate::api::send_and_text;
+use crate::state::ok_or_internal;
+use crate::{AppData, token, unwrap_return, unwrap_return_internal};
 
 const SCOPE: &str = "email%20profile%20https://www.googleapis.com/auth/drive%20openid";
 

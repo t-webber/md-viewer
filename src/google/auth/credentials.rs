@@ -26,10 +26,6 @@ impl GoogleAuthCredentials {
     }
 
     pub const fn new(id: String, redirect_uri: String, secret: String) -> Self {
-        Self {
-            id,
-            redirect_uri,
-            secret,
-        }
+        Self { id, redirect_uri, secret }
     }
 }

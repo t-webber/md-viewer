@@ -3,10 +3,9 @@ use std::sync::{Mutex, MutexGuard};
 
 use actix_web::{HttpRequest, HttpResponse, web};
 
-use crate::google::{
-    auth::{credentials::GoogleAuthCredentials, login::ClientOAuthData},
-    drive::manager::DriveManager,
-};
+use crate::google::auth::credentials::GoogleAuthCredentials;
+use crate::google::auth::login::ClientOAuthData;
+use crate::google::drive::manager::DriveManager;
 
 pub type AppData = web::Data<AppState>;
 
@@ -114,10 +113,7 @@ impl AppState {
 }
 
 fn lock_error_msg(data_type: &str, err: &impl ToString) -> String {
-    format!(
-        "Failed to obtain lock for {data_type}:\n{}",
-        err.to_string()
-    )
+    format!("Failed to obtain lock for {data_type}:\n{}", err.to_string())
 }
 
 pub fn unlock<'data, T>(

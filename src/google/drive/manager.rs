@@ -1,9 +1,6 @@
-use crate::{
-    google::drive::interface::{FileType, create_folder, root_contains_file},
-    log,
-};
-
 use super::interface::DriveFile;
+use crate::google::drive::interface::{FileType, create_folder, root_contains_file};
+use crate::log;
 
 #[derive(Debug)]
 enum AppFolder {
@@ -24,9 +21,7 @@ pub struct DriveManager {
 
 impl DriveManager {
     pub const fn new(folder_name: String) -> Self {
-        Self {
-            app_folder: async_lock::Mutex::new(AppFolder::Name(folder_name)),
-        }
+        Self { app_folder: async_lock::Mutex::new(AppFolder::Name(folder_name)) }
     }
 
     pub async fn app_folder_id(&self, token: &str) -> Result<Box<str>, String> {
